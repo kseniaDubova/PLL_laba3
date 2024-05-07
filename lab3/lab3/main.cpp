@@ -40,35 +40,40 @@ int main() {
     MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
 
     srand(static_cast<unsigned int>(time(nullptr)) + world_rank);
+    for (int i = 0; i < 10; i++)
+    {
+        int SIZE[9] = { 10, 50, 100, 500, 600, 700, 800, 900, 1000 };
+        for (int i = 0; i < 9; i++)
+        {
+            cout << "размер - " << SIZE[i] << endl;
+            vector<int> matrix_1(SIZE[i] * SIZE[i]);
+            vector<int> matrix_2(SIZE[i] * SIZE[i]);
+            vector<int> matrix_result(SIZE[i] * SIZE[i]);
 
-    int SIZE = 100; // Укажите здесь размер вашей матрицы
-    vector<int> matrix_1(SIZE * SIZE);
-    vector<int> matrix_2(SIZE * SIZE);
-    vector<int> matrix_result(SIZE * SIZE);
+            if (world_rank == 0) {
+                create_matrix(SIZE[i], matrix_1);
+                create_matrix(SIZE[i], matrix_2);
+            }
 
-    if (world_rank == 0) {
-        create_matrix(SIZE, matrix_1);
-        create_matrix(SIZE, matrix_2);
-    }
+            MPI_Bcast(matrix_1.data(), SIZE[i] * SIZE[i], MPI_INT, 0, MPI_COMM_WORLD);
+            MPI_Bcast(matrix_2.data(), SIZE[i] * SIZE[i], MPI_INT, 0, MPI_COMM_WORLD);
 
-    // Разослать matrix_1 и matrix_2 всем процессам
-    MPI_Bcast(matrix_1.data(), SIZE * SIZE, MPI_INT, 0, MPI_COMM_WORLD);
-    MPI_Bcast(matrix_2.data(), SIZE * SIZE, MPI_INT, 0, MPI_COMM_WORLD);
+            int local_size = SIZE[i] / world_size;
+            int row_start = world_rank * local_size;
+            int row_end = (world_rank + 1) * local_size;
 
-    int local_size = SIZE / world_size;
-    int row_start = world_rank * local_size;
-    int row_end = (world_rank + 1) * local_size;
+            auto start = chrono::high_resolution_clock::now();
+            mul_matrix(matrix_1, matrix_2, matrix_result, SIZE[i], row_start, row_end);
+            auto end = chrono::high_resolution_clock::now();
 
-    auto start = chrono::high_resolution_clock::now();
-    mul_matrix(matrix_1, matrix_2, matrix_result, SIZE, row_start, row_end);
-    auto end = chrono::high_resolution_clock::now();
+            MPI_Gather(&matrix_result[row_start * SIZE[i]], local_size * SIZE[i], MPI_INT, matrix_result.data(), local_size * SIZE[i], MPI_INT, 0, MPI_COMM_WORLD);
 
-    // Собрать локальные результаты в matrix_result процесса 0
-    MPI_Gather(&matrix_result[row_start * SIZE], local_size * SIZE, MPI_INT, matrix_result.data(), local_size * SIZE, MPI_INT, 0, MPI_COMM_WORLD);
-
-    if (world_rank == 0) {
-        double duration = chrono::duration_cast<chrono::milliseconds>(end - start).count() / 1000.0;
-        cout << "Время выполнения: " << duration << " секунд" << endl;
+            if (world_rank == 0) {
+                double duration = chrono::duration_cast<chrono::milliseconds>(end - start).count() / 1000.0;
+                cout << duration << ", ";
+            }
+            cout << endl << endl;
+        }
     }
 
     MPI_Finalize();
